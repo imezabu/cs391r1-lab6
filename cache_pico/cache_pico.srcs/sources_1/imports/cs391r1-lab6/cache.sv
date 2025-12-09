@@ -21,7 +21,7 @@
 
 
 module cache #(
-    parameter INDEX_BITS = 6,
+    parameter INDEX_BITS = 8,
     parameter TAG_BITS = (32-INDEX_BITS)
 )(
     //basic
@@ -79,7 +79,7 @@ module cache #(
     // states
     
     localparam IDLE=  3'b000;
-    localparam READ= 3'b001;
+    localparam READ_MEM= 3'b001;
     localparam OVERWRITE= 3'b010;
     localparam EVICT = 3'b011;
     localparam EVICT_ACK = 3'b100;
@@ -87,13 +87,13 @@ module cache #(
     localparam REFILL_ACK=3'b110;
     //TYPES
     localparam NONE = 2'b00;
-    localparam REA = 2'b01;
+    localparam READ = 2'b01;
     localparam WRITE = 2'b10;
     
-    reg [31:0] cache_data [NUM_LINES];
-    reg cache_dirty[NUM_LINES];
-    reg [TAG_BITS-1:0] cache_tag [NUM_LINES];
-    reg cache_valid [NUM_LINES];
+    reg [31:0] cache_data [0:NUM_LINES-1];
+    reg cache_dirty[0:NUM_LINES-1];
+    reg [TAG_BITS-1:0] cache_tag [0:NUM_LINES-1];
+    reg cache_valid [0:NUM_LINES-1];
     
     reg [INDEX_BITS-1:0] index;
     reg [TAG_BITS-1:0] tag;
@@ -102,20 +102,43 @@ module cache #(
     reg [31:0] latched_data;
     reg [1:0] req_type; // bool for request type
     
-    reg[3:0] state;
-    
+    reg[2:0] state;
     //HARDCODED
     assign bram_awprot = 0;
     assign bram_arprot= 0;
     assign bram_wstrb = 4'b1111;
+    integer i=0;
     
     always @(posedge clk) begin
-    
         if (rst) begin
-            //fix later
-            req_type<=NONE;
+            // Reset control signals
+            req_type <= NONE;
+            cpu_awready <= 0;
+            cpu_wready <= 0;
+            cpu_bvalid <= 0;
+            cpu_arready <= 0;
+            cpu_rvalid <= 0;
+            cpu_rdata <= 0;
+            bram_awvalid <= 0;
+            bram_wvalid <= 0;
+            bram_bready <= 0;
+            bram_arvalid <= 0;
+            bram_rready <= 0;
+            state <= IDLE;
+            index <= 0;
+            tag <= 0;
+            bram_araddr <= 0;
+            bram_awaddr <= 0;
+            bram_wdata <= 0;
+            latched_addr <= 0;
+            latched_data <= 0;
+            // Reset cache arrays - FIXED: integer declared inside block
+            for (i = 0; i < NUM_LINES; i = i + 1) begin
+                cache_valid[i] <= 0;
+                cache_dirty[i] <= 0;
+            end
         end
-        else if (state == IDLE) begin
+        else begin
             
             case(state)
                 IDLE: begin
@@ -134,12 +157,15 @@ module cache #(
                             cpu_wready<=0;
                             cpu_awready<=0;
                             //HIT
-                            if(cache_valid[index] && cache_tag[index]==tag) begin
-                                state<=READ; //maybe adjust
+                            if(cache_valid[cpu_awaddr[INDEX_BITS-1:0]] && cache_tag[cpu_awaddr[INDEX_BITS-1:0]]==cpu_araddr[31: INDEX_BITS]) begin
+                                state<=READ_MEM; //maybe adjust
+                                /*cache efficiency
+                                cpu_rvalid<=1;
+                                cpu_rdata<=cache_data[index];*/
                             end
                             //MISS
                             else begin
-                                if(cache_valid[index] && cache_dirty[index]) begin //dirty
+                                if(cache_valid[cpu_awaddr[INDEX_BITS-1:0]] && cache_dirty[cpu_awaddr[INDEX_BITS-1:0]]) begin //dirty
                                     state<=EVICT;
                                 end else begin //non-dirty
                                     state<=REFILL;
@@ -161,12 +187,18 @@ module cache #(
                             cpu_wready<=0;
                             cpu_awready<=0;
                             //HIT
-                            if(cache_valid[index] && cache_tag[index]==tag) begin
+                            if(cache_valid[cpu_awaddr[INDEX_BITS-1:0]] && cache_tag[cpu_awaddr[INDEX_BITS-1:0]]==cpu_araddr[31: INDEX_BITS]) begin
                                 state<=OVERWRITE;
+                                /*efficiency? do this immediately on the clock?
+                                cpu_bvalid<=1;
+                                cache_data[index]<=latched_data;
+                                cache_tag[index]<=tag;
+                                cache_valid[index]<=1;
+                                cache_dirty[index]<=1;*/
                             end
                             //MISS
                             else begin
-                                if(cache_valid[index] && cache_dirty[index]) begin //dirty
+                                if(cache_valid[cpu_awaddr[INDEX_BITS-1:0]] && cache_dirty[cpu_awaddr[INDEX_BITS-1:0]]) begin //dirty
                                     state<=EVICT;
                                 end else begin //non-dirty
                                     state<=OVERWRITE; //maybe refill?
@@ -175,7 +207,7 @@ module cache #(
                         
                     end
                 end
-                READ: begin
+                READ_MEM: begin
                     cpu_rvalid<=1;
                     cpu_rdata<=cache_data[index];
                     if(cpu_rvalid && cpu_rready) begin 
@@ -209,11 +241,11 @@ module cache #(
                     bram_rready<=1;
                     if(bram_rready && bram_rvalid) begin
                         bram_rready<=0;
-                        cache_data[index]=bram_rdata;
-                        cache_valid[index]=1;
-                        cache_dirty[index]=0;
+                        cache_data[index]<=bram_rdata;
+                        cache_valid[index]<=1;
+                        cache_dirty[index]<=0;
                         cache_tag[index]<=tag;
-                        state<=READ; //if we implement clean write refill then we need logic here to change this depending on txn type
+                        state<=READ_MEM; //if we implement clean write refill then we need logic here to change this depending on txn type
                     end
                 end
                 EVICT: begin
@@ -225,7 +257,7 @@ module cache #(
                         bram_awvalid<=0;
                         bram_wvalid<=0;
                         bram_bready<=1;
-                        cache_valid[index]=0; //safety?
+                        cache_valid[index]<=0; //safety?
                         state<=EVICT_ACK;
                     end
                 end
