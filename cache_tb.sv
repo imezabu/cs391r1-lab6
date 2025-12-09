@@ -153,7 +153,49 @@ module cache_tb();
 reg [31:0] addr;
 reg [31:0] data;
 initial begin
+    cpu_awvalid=0;
+    cpu_awaddr=0;
+    cpu_wvalid=0;
+    cpu_wdata=0;
+    cpu_bready=0;
+    cpu_arvalid=0;
+    cpu_araddr=0;
+    cpu_rready=0;
+    
     //write to 0x000000_00 (8 bits index, the rest tag)
+    rst=1; #100; rst=0;
+    
+    //write
+   @(posedge clk);
+   cpu_awvalid=1;
+   cpu_awaddr={24'h000000, 8'h00}; //0x000000_00
+   cpu_wvalid=1;
+   cpu_wdata={32'hdeadbeef}; //write data
+   wait(cpu_awready && cpu_wready);
+   @(posedge clk);
+   cpu_awvalid=0;
+   cpu_wvalid=0;
+   cpu_bready=1;
+   wait(cpu_bvalid);
+   @(posedge clk);
+   cpu_bready=0;
+   //Inspect cache address to make sure it has correct data
+   //if this causes an eviction, investigate evicted address in bram to make sure it worked
+   
+   
+   //read of 0x000000_00
+   @(posedge clk);
+   cpu_arvalid=1;
+   cpu_araddr={24'h000000, 8'h00}; //0x000000_00
+   wait(cpu_arready);
+   @(posedge clk);
+   cpu_rready=1;
+   wait(cpu_rvalid);
+   //inspect rdata to make sure its reading correct values
+   //if you have a miss, make sure correct data is refilled
+   // if this causes an eviction, investigate evicted address in bram to make sure it evicted right
+   
+   
    
 end
 
