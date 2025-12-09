@@ -27,6 +27,17 @@ module cache_tb();
     parameter TAG_BITS = 24;
     parameter CLK_PERIOD = 10;
     
+    task print_cache_line;
+    input integer idx;
+    begin
+        $display("  Cache[0x%02h]: Valid=%b, Dirty=%b, Tag=0x%h, Data=0x%h",
+            idx,
+            dut.cache_valid[idx],
+            dut.cache_dirty[idx],
+            dut.cache_tag[idx],
+            dut.cache_data[idx]);
+    end
+endtask
     // Clock and reset
     bit clk;
     bit rst;
@@ -160,13 +171,31 @@ initial begin
     cpu_bready=0;
     cpu_arvalid=0;
     cpu_araddr=0;
-    cpu_rready=0;
-    
+    cpu_rready=0;rst=1; #100; rst=0;
+    //TEST 1: BASIC WRITE MISS no evict
     //write to 0x000000_00 (8 bits index, the rest tag)
-    rst=1; #100; rst=0;
     
-    //write
-   @(posedge clk);
+    repeat(2) @(posedge clk);
+   cpu_awvalid=1;
+   cpu_awaddr={24'h000000, 8'h00}; //0x000000_00
+   cpu_wvalid=1;
+   cpu_wdata={32'hffffffff}; //write data
+   wait(cpu_awready && cpu_wready&&cpu_wvalid&&cpu_awvalid);
+   repeat (2) @(posedge clk);
+   cpu_awvalid=0;
+   cpu_wvalid=0;
+   cpu_bready=1;
+   wait(cpu_bvalid && cpu_bready);
+   repeat (2) @(posedge clk);   cpu_bready=0;
+   //Inspect cache address to make sure it has correct data
+   //if this causes an eviction, investigate evicted address in bram to make sure it worked
+   $display("  Write complete: addr=0x%h, data=0x%h", 32'h00000000, 32'hffffffff);
+    $display("  Expected: Cache MISS, State should go OVERWRITE but not evict since curr line is not dirty");
+    $display("  Cache[0x00] should now contain: valid=1, dirty=1, tag=0x000000, data=0xfffffff");
+    $display("Results:"); print_cache_line(8'h0);
+    
+    //TEST 2: Basic overwrite on hit
+   repeat (2) @(posedge clk);
    cpu_awvalid=1;
    cpu_awaddr={24'h000000, 8'h00}; //0x000000_00
    cpu_wvalid=1;
@@ -180,7 +209,13 @@ initial begin
    repeat (2) @(posedge clk);   cpu_bready=0;
    //Inspect cache address to make sure it has correct data
    //if this causes an eviction, investigate evicted address in bram to make sure it worked
-   
+   $display("  Write complete: addr=0x%h, data=0x%h", 32'h00000000, 32'hDEADBEEF);
+    $display("  Expected: Cache Hit, State should get overwrite no evict");
+    $display("  Cache[0x00] should now contain: valid=1, dirty=1, tag=0x000000, data=0xDEADBEEF");
+    $display("Results:"); print_cache_line(8'h0);
+    
+    
+    
    
    //read of 0x000000_00
    @(posedge clk);
@@ -189,6 +224,9 @@ initial begin
    wait(cpu_arready);
    repeat (2) @(posedge clk);   cpu_rready=1;
    wait(cpu_rvalid);
+   $display("  Read complete: addr=0x%h, data=0x%h", 32'h00000000, cpu_rdata);
+    $display("Expected: Cache hit, no evictions needed");
+    $display("  Expected data: 0xDEADBEEF (should match!)");
    //inspect rdata to make sure its reading correct values
    //if you have a miss, make sure correct data is refilled
    // if this causes an eviction, investigate evicted address in bram to make sure it evicted right
