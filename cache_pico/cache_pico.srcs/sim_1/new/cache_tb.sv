@@ -27,17 +27,9 @@ module cache_tb();
     parameter TAG_BITS = 24;
     parameter CLK_PERIOD = 10;
     
-    task print_cache_line;
-    input integer idx;
-    begin
-        $display("  Cache[0x%02h]: Valid=%b, Dirty=%b, Tag=0x%h, Data=0x%h",
-            idx,
-            dut.cache_valid[idx],
-            dut.cache_dirty[idx],
-            dut.cache_tag[idx],
-            dut.cache_data[idx]);
-    end
-endtask
+
+
+
     // Clock and reset
     bit clk;
     bit rst;
@@ -163,6 +155,21 @@ endtask
 
 reg [31:0] addr;
 reg [31:0] data;
+
+    task print_cache_line;
+    input integer idx;
+    begin
+        $display("  Cache[0x%02h]: Valid=%b, Dirty=%b, Tag=0x%h, Data=0x%h",
+            idx,
+            dut.cache_valid[idx],
+            dut.cache_dirty[idx],
+            dut.cache_tag[idx],
+            dut.cache_data[idx]);
+    end
+    endtask
+    
+    
+
 initial begin
     cpu_awvalid=0;
     cpu_awaddr=0;
@@ -172,7 +179,7 @@ initial begin
     cpu_arvalid=0;
     cpu_araddr=0;
     cpu_rready=0;rst=1; #100; rst=0;
-    //TEST 1: BASIC WRITE MISS no evict
+    //TEST 1: BASIC WRITE MISS: Miss -> Overwrite
     //write to 0x000000_00 (8 bits index, the rest tag)
     
     repeat(2) @(posedge clk);
@@ -194,7 +201,7 @@ initial begin
     $display("  Cache[0x00] should now contain: valid=1, dirty=1, tag=0x000000, data=0xfffffff");
     $display("Results:"); print_cache_line(8'h0);
     
-    //TEST 2: Basic overwrite on hit
+    //TEST 2: Basic overwrite on hit: Hit -> Overwrite
    repeat (2) @(posedge clk);
    cpu_awvalid=1;
    cpu_awaddr={24'h000000, 8'h00}; //0x000000_00
@@ -212,24 +219,36 @@ initial begin
    $display("  Write complete: addr=0x%h, data=0x%h", 32'h00000000, 32'hDEADBEEF);
     $display("  Expected: Cache Hit, State should get overwrite no evict");
     $display("  Cache[0x00] should now contain: valid=1, dirty=1, tag=0x000000, data=0xDEADBEEF");
+    $display("Results:"); print_cache_line(8'h00);
+    
+    //TEST 3: Dirty Write Miss: Evict -> overwrite
+   repeat (2) @(posedge clk);
+   cpu_awvalid=1;
+   cpu_awaddr={24'h000001, 8'h00}; //0x000000_00
+   cpu_wvalid=1;
+   cpu_wdata={32'hbeefbeef}; //write data
+   wait(cpu_awready && cpu_wready);
+   repeat (2) @(posedge clk);
+   cpu_awvalid=0;
+   cpu_wvalid=0;
+   cpu_bready=1;
+   wait(cpu_bvalid);
+   repeat (2) @(posedge clk);   cpu_bready=0;
+   //Inspect cache address to make sure it has correct data
+   //if this causes an eviction, investigate evicted address in bram to make sure it worked
+   $display("  Write complete: addr=0x%h, data=0x%h", 32'h00000100, 32'hbeefbeef);
+    $display("  Expected: Cache Conflict Miss, should evict then overwite");
+    $display("  Cache[0x00] should now contain: valid=1, dirty=1, tag=0x000001, data=0xBEEFBEEF");
     $display("Results:"); print_cache_line(8'h0);
-    
-    
-    
-   
-   //read of 0x000000_00
-   @(posedge clk);
+   $display("Expected evicted BRAM Data at [%h]: 0xdeadbeef",20'h00000);
+   //verify evict of 0x000000_00
+   repeat (2) @(posedge clk);
    cpu_arvalid=1;
    cpu_araddr={24'h000000, 8'h00}; //0x000000_00
    wait(cpu_arready);
    repeat (2) @(posedge clk);   cpu_rready=1;
    wait(cpu_rvalid);
-   $display("  Read complete: addr=0x%h, data=0x%h", 32'h00000000, cpu_rdata);
-    $display("Expected: Cache hit, no evictions needed");
-    $display("  Expected data: 0xDEADBEEF (should match!)");
-   //inspect rdata to make sure its reading correct values
-   //if you have a miss, make sure correct data is refilled
-   // if this causes an eviction, investigate evicted address in bram to make sure it evicted right
+   $display("  Read complete: addr=0x%h, data=0x%h", 32'h00000100, cpu_rdata);
    
    
    
