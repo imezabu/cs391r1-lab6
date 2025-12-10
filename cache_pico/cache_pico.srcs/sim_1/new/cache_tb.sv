@@ -251,46 +251,98 @@ initial begin
    repeat (2) @(posedge clk);
    cpu_arvalid=1;
    cpu_araddr={24'h000000, 8'h00}; //0x000000_00
-   wait(cpu_arready);
-   repeat (2) @(posedge clk);   cpu_rready=1;
+   wait(cpu_arready); 
+   repeat (2) @(posedge clk);   cpu_rready=1;cpu_arvalid=0;
    wait(cpu_rvalid);
    $display("  Read complete: addr=0x%h, data=0x%h", 32'h00000000, cpu_rdata); 
    $display("  Expected: Cache Conflict Miss, should evict, refill with valid BRAM data, and then read");
    $display("  Cache[0x00] should now contain: valid=1, dirty=0, tag=0x000001, data=0xdeadbeef");
    $display("Results:"); print_cache_line(8'h0);
    $display("Expected evicted BRAM Data at [%h]: 0xbeefbeef",20'h00100);
+   repeat (2) @(posedge clk);cpu_rready=0;
    
    //TEST 5: READ HIT
    repeat (2) @(posedge clk);
    cpu_arvalid=1;
    cpu_araddr={24'h000000, 8'h00}; //0x000000_00
    wait(cpu_arready);
-   repeat (2) @(posedge clk);   cpu_rready=1;
+   repeat (2) @(posedge clk);   cpu_arvalid=0; cpu_rready=1;
    wait(cpu_rvalid);
    $display("TEST 5");
    $display("  Read complete: addr=0x%h, data=0x%h", 32'h00000000, cpu_rdata); 
    $display("  Expected: Cache Hit, should read");
    $display("  Cache[0x00] should now contain: valid=1, dirty=0, tag=0x000000, data=0xdeadbeef");
    $display("Results:"); print_cache_line(8'h0);
+   repeat (2) @(posedge clk);cpu_rready=0;
+
    
    //TEST 6: CLEAN READ MISS
    repeat (2) @(posedge clk);
    cpu_arvalid=1;
    cpu_araddr={24'h000001, 8'h00}; //0x000001_00
    wait(cpu_arready);
-   repeat (2) @(posedge clk);   cpu_rready=1;
+   repeat (2) @(posedge clk);   cpu_arvalid=0;cpu_rready=1;
    wait(cpu_rvalid);
-   $display("TEST 5");
+   $display("TEST 6");
    $display("  Read complete: addr=0x%h, data=0x%h", 32'h00000100, cpu_rdata); 
-   $display("  Expected: Cache Hit, should read");
+   $display("  Expected:Clean Cache Miss, should refill then read");
    $display("  Cache[0x00] should now contain: valid=1, dirty=0, tag=0x000001, data=0xbeefbeef");
    $display("Results:"); print_cache_line(8'h0);
+   repeat (2) @(posedge clk);cpu_rready=0;
+
+   
+   //EDGE CASES
+   
+   //Write to adddresses and then do subsequent reads from them
+   repeat (2) @(posedge clk);
+   cpu_awvalid=1;
+   cpu_awaddr={24'h000003, 8'hff}; //0x000003_ff
+   cpu_wvalid=1;
+   cpu_wdata={32'h11223344}; //write data
+   wait(cpu_awready && cpu_wready);
+   repeat (2) @(posedge clk);
+   cpu_awvalid=0;
+   cpu_wvalid=0;
+   cpu_bready=1;
+   wait(cpu_bvalid);
+   repeat (2) @(posedge clk);   cpu_bready=0;
+   repeat (2) @(posedge clk);
+   cpu_awvalid=1;
+   cpu_awaddr={24'h000004, 8'haa}; //0x000003_ff
+   cpu_wvalid=1;
+   cpu_wdata={32'h99887766}; //write data
+   wait(cpu_awready && cpu_wready);
+   repeat (2) @(posedge clk);
+   cpu_awvalid=0;
+   cpu_wvalid=0;
+   cpu_bready=1;
+   wait(cpu_bvalid);
+   repeat (2) @(posedge clk);   cpu_bready=0;
    
    
-   
-   
-   
-   
+   //begin reads
+   repeat (2) @(posedge clk);
+   cpu_arvalid=1;
+   cpu_araddr={24'h000003, 8'hff}; //0x000001_00
+   wait(cpu_arready);
+   repeat (2) @(posedge clk);   cpu_arvalid=0;cpu_rready=1;
+   wait(cpu_rvalid);
+   $display("  Read complete: addr=0x%h, data=0x%h", 32'h000003ff, cpu_rdata); 
+   $display(" EXPECTED DATA: 0x11223344");
+   repeat (2) @(posedge clk);cpu_rready=0;
+   print_cache_line(8'hff);
+   //begin second read
+   repeat (2) @(posedge clk);
+   cpu_arvalid=1;
+   cpu_araddr={24'h000004, 8'haa}; //0x000001_00
+   wait(cpu_arready);
+   repeat (2) @(posedge clk);  cpu_arvalid=0; cpu_rready=1;
+   wait(cpu_rvalid);
+   $display("  Read complete: addr=0x%h, data=0x%h", 32'h000004aa, cpu_rdata); 
+   $display(" EXPECTED DATA: 0x99887766");
+   print_cache_line(8'haa);
+      repeat (2) @(posedge clk);cpu_rready=0;
+
     $finish;
    
    
