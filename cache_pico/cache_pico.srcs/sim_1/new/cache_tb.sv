@@ -179,9 +179,10 @@ initial begin
     cpu_arvalid=0;
     cpu_araddr=0;
     cpu_rready=0;rst=1; #100; rst=0;
+
+    
     //TEST 1: BASIC WRITE MISS: Miss -> Overwrite
     //write to 0x000000_00 (8 bits index, the rest tag)
-    
     repeat(2) @(posedge clk);
    cpu_awvalid=1;
    cpu_awaddr={24'h000000, 8'h00}; //0x000000_00
