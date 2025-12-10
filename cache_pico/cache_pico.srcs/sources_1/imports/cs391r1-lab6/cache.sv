@@ -157,7 +157,7 @@ module cache #(
                             cpu_wready<=0;
                             cpu_awready<=0;
                             //HIT
-                            if(cache_valid[cpu_awaddr[INDEX_BITS-1:0]] && cache_tag[cpu_awaddr[INDEX_BITS-1:0]]==cpu_araddr[31: INDEX_BITS]) begin
+                            if(cache_valid[cpu_araddr[INDEX_BITS-1:0]] && cache_tag[cpu_araddr[INDEX_BITS-1:0]]==cpu_araddr[31: INDEX_BITS]) begin
                                 state<=READ_MEM; //maybe adjust
                                 /*cache efficiency
                                 cpu_rvalid<=1;
@@ -165,7 +165,7 @@ module cache #(
                             end
                             //MISS
                             else begin
-                                if(cache_valid[cpu_awaddr[INDEX_BITS-1:0]] && cache_dirty[cpu_awaddr[INDEX_BITS-1:0]]) begin //dirty
+                                if(cache_valid[cpu_araddr[INDEX_BITS-1:0]] && cache_dirty[cpu_araddr[INDEX_BITS-1:0]]) begin //dirty
                                     state<=EVICT;
                                 end else begin //non-dirty
                                     state<=REFILL;
@@ -187,7 +187,7 @@ module cache #(
                             cpu_wready<=0;
                             cpu_awready<=0;
                             //HIT
-                            if(cache_valid[cpu_awaddr[INDEX_BITS-1:0]] && cache_tag[cpu_awaddr[INDEX_BITS-1:0]]==cpu_araddr[31: INDEX_BITS]) begin
+                            if(cache_valid[cpu_awaddr[INDEX_BITS-1:0]] && cache_tag[cpu_awaddr[INDEX_BITS-1:0]]==cpu_awaddr[31: INDEX_BITS]) begin
                                 state<=OVERWRITE;
                                 /*efficiency? do this immediately on the clock?
                                 cpu_bvalid<=1;
