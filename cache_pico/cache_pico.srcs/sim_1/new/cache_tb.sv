@@ -179,10 +179,10 @@ initial begin
     cpu_arvalid=0;
     cpu_araddr=0;
     cpu_rready=0;rst=1; #100; rst=0;
-
-    
     //TEST 1: BASIC WRITE MISS: Miss -> Overwrite
     //write to 0x000000_00 (8 bits index, the rest tag)
+       $display("TEST 1");
+
     repeat(2) @(posedge clk);
    cpu_awvalid=1;
    cpu_awaddr={24'h000000, 8'h00}; //0x000000_00
@@ -200,9 +200,11 @@ initial begin
    $display("  Write complete: addr=0x%h, data=0x%h", 32'h00000000, 32'hffffffff);
     $display("  Expected: Cache MISS, State should go OVERWRITE but not evict since curr line is not dirty");
     $display("  Cache[0x00] should now contain: valid=1, dirty=1, tag=0x000000, data=0xfffffff");
-    $display("Results:"); print_cache_line(8'h0);
+    $display("Results:"); print_cache_line(8'h00);
     
     //TEST 2: Basic overwrite on hit: Hit -> Overwrite
+       $display("TEST 2");
+
    repeat (2) @(posedge clk);
    cpu_awvalid=1;
    cpu_awaddr={24'h000000, 8'h00}; //0x000000_00
@@ -223,6 +225,8 @@ initial begin
     $display("Results:"); print_cache_line(8'h00);
     
     //TEST 3: Dirty Write Miss: Evict -> overwrite
+       $display("TEST 3");
+
    repeat (2) @(posedge clk);
    cpu_awvalid=1;
    cpu_awaddr={24'h000001, 8'h00}; //0x000000_00
@@ -242,14 +246,52 @@ initial begin
     $display("  Cache[0x00] should now contain: valid=1, dirty=1, tag=0x000001, data=0xBEEFBEEF");
     $display("Results:"); print_cache_line(8'h0);
    $display("Expected evicted BRAM Data at [%h]: 0xdeadbeef",20'h00000);
-   //verify evict of 0x000000_00
+   //TEST 4 verify evict of 0x000000_00: DIRTY READ MISS
+   $display("TEST 4");
    repeat (2) @(posedge clk);
    cpu_arvalid=1;
    cpu_araddr={24'h000000, 8'h00}; //0x000000_00
    wait(cpu_arready);
    repeat (2) @(posedge clk);   cpu_rready=1;
    wait(cpu_rvalid);
-   $display("  Read complete: addr=0x%h, data=0x%h", 32'h00000100, cpu_rdata);
+   $display("  Read complete: addr=0x%h, data=0x%h", 32'h00000000, cpu_rdata); 
+   $display("  Expected: Cache Conflict Miss, should evict, refill with valid BRAM data, and then read");
+   $display("  Cache[0x00] should now contain: valid=1, dirty=0, tag=0x000001, data=0xdeadbeef");
+   $display("Results:"); print_cache_line(8'h0);
+   $display("Expected evicted BRAM Data at [%h]: 0xbeefbeef",20'h00100);
+   
+   //TEST 5: READ HIT
+   repeat (2) @(posedge clk);
+   cpu_arvalid=1;
+   cpu_araddr={24'h000000, 8'h00}; //0x000000_00
+   wait(cpu_arready);
+   repeat (2) @(posedge clk);   cpu_rready=1;
+   wait(cpu_rvalid);
+   $display("TEST 5");
+   $display("  Read complete: addr=0x%h, data=0x%h", 32'h00000000, cpu_rdata); 
+   $display("  Expected: Cache Hit, should read");
+   $display("  Cache[0x00] should now contain: valid=1, dirty=0, tag=0x000000, data=0xdeadbeef");
+   $display("Results:"); print_cache_line(8'h0);
+   
+   //TEST 6: CLEAN READ MISS
+   repeat (2) @(posedge clk);
+   cpu_arvalid=1;
+   cpu_araddr={24'h000001, 8'h00}; //0x000001_00
+   wait(cpu_arready);
+   repeat (2) @(posedge clk);   cpu_rready=1;
+   wait(cpu_rvalid);
+   $display("TEST 5");
+   $display("  Read complete: addr=0x%h, data=0x%h", 32'h00000100, cpu_rdata); 
+   $display("  Expected: Cache Hit, should read");
+   $display("  Cache[0x00] should now contain: valid=1, dirty=0, tag=0x000001, data=0xbeefbeef");
+   $display("Results:"); print_cache_line(8'h0);
+   
+   
+   
+   
+   
+   
+    $finish;
    
    
    
